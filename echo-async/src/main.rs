@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, time::Duration};
+use std::{sync::{Arc, atomic::{AtomicU32, Ordering}}, time::Duration};
 
 use anyhow::{Context, Result};
 use tokio::{
@@ -9,8 +9,7 @@ use tokio::{
     task::JoinSet,
 };
 
-async fn handle_conn(id: u32, mut stream: TcpStream, peer: SocketAddr, mut shutdown: Receiver<()>) {
-    eprintln!("accepted conn #{} from {}", id, peer);
+async fn handle_conn(id: u32, mut stream: TcpStream, mut shutdown: Receiver<()>) -> Result<()> {
     let mut buf = [0u8; 4096];
     let mut total: u64 = 0;
     loop {
@@ -18,25 +17,21 @@ async fn handle_conn(id: u32, mut stream: TcpStream, peer: SocketAddr, mut shutd
         biased;
         _ = shutdown.recv() => {
             eprintln!("conn #{} closed on shutdown after {} bytes", id, total);
-            return;
+            return Ok(());
         }
         read = stream.read(&mut buf) => {
         match read {
             Ok(0) => {
                 eprintln!("conn #{} closed by peer after {} bytes", id, total);
-                return;
+                return Ok(());
             }
             Ok(n) => {
-                if let Err(e) = stream.write_all(&buf[..n]).await {
-                    eprintln!("conn #{} error: {}", id, e);
-                    return;
-                }
+                stream.write_all(&buf[..n]).await?;
                 total += n as u64;
                 eprintln!("conn #{} echoed {} bytes", id, n);
             }
             Err(e) => {
-                eprintln!("conn #{} error: {}", id, e);
-                return;
+                return Err(e).with_context(|| format!("conn #{} read failed", id));
             }
             }
         }
@@ -50,7 +45,8 @@ async fn main() -> Result<()> {
         .await
         .context("bind failed")?;
     let mut total_conns: u32 = 0;
-    let mut tasks: JoinSet<()> = JoinSet::new();
+    let active_conns = Arc::new(AtomicU32::new(0));
+    let mut tasks: JoinSet<Result<()>> = JoinSet::new();
     let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
     eprintln!("listening on {}", listener.local_addr()?);
 
@@ -58,9 +54,10 @@ async fn main() -> Result<()> {
         tokio::select! {
             biased;
             _ = signal::ctrl_c() => {
-                eprintln!("shutdown requested. draining {} active connection{}",
-                    tasks.len(),
-                    if tasks.len() == 1 { "" } else { "s" }
+                let n = active_conns.load(Ordering::SeqCst);
+                eprintln!("shutdown requested, draining {} active connection{}",
+                    n,
+                    if n == 1 { "" } else { "s" }
                 );
                 let _ = shutdown_tx.send(());
                 break;
@@ -68,16 +65,36 @@ async fn main() -> Result<()> {
             accept = listener.accept() => {
                 let (stream, peer) = accept.context("accept failed")?;
                 let shutdown_rx = shutdown_tx.subscribe();
+                let active_clone = active_conns.clone();
                 total_conns += 1;
-                let id = total_conns;
-                tasks.spawn(handle_conn(id, stream, peer, shutdown_rx));
+                eprintln!("accepted conn #{} from {}", total_conns, peer);
+                active_clone.fetch_add(1, Ordering::SeqCst);
+                tasks.spawn(async move {
+                    let result = handle_conn(total_conns, stream, shutdown_rx).await;
+                    active_clone.fetch_sub(1, Ordering::SeqCst);
+                    result
+                });
+            },
+            Some(joined) = tasks.join_next(), if !tasks.is_empty() => {
+                match joined {
+                    Ok(Err(e)) => eprintln!("conn error: {}", e),
+                    Err(e) if e.is_panic() => eprintln!("conn panicked: {}", e),
+                    _ => {}
+                }
             }
         }
     }
 
     // drain
     let drain = tokio::time::timeout(Duration::from_secs(5), async {
-        while tasks.join_next().await.is_some() {}
+        while let Some(joined) = tasks.join_next().await {
+            match joined {
+                Ok(Ok(())) => {}                              // clean
+                Ok(Err(e)) => eprintln!("conn error: {}", e), // handler returned Err
+                Err(e) if e.is_panic() => eprintln!("conn panicked: {}", e),
+                Err(_) => {} // task was aborted
+            }
+        }
     });
     let _ = drain.await; // ignore timeout; we exit either way
     eprintln!("shutdown complete");
