@@ -1,10 +1,16 @@
-use std::{sync::{Arc, atomic::{AtomicU32, Ordering}}, time::Duration};
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicU32, Ordering},
+    },
+    time::Duration,
+};
 
 use anyhow::{Context, Result};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
-    signal,
+    signal::{self},
     sync::broadcast::Receiver,
     task::JoinSet,
 };
@@ -50,10 +56,26 @@ async fn main() -> Result<()> {
     let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
     eprintln!("listening on {}", listener.local_addr()?);
 
+    let shutdown = async {
+        #[cfg(unix)]
+        {
+            let mut sigterm = signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                .expect("install SIGTERM handler");
+            tokio::select! {
+                _ = sigterm.recv() => {}
+                _ = signal::ctrl_c() => {}
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = signal::ctrl_c().await;
+        }
+    };
+    tokio::pin!(shutdown);
     loop {
         tokio::select! {
             biased;
-            _ = signal::ctrl_c() => {
+            _ = &mut shutdown => {
                 let n = active_conns.load(Ordering::SeqCst);
                 eprintln!("shutdown requested, draining {} active connection{}",
                     n,
