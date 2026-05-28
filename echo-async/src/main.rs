@@ -7,6 +7,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use clap::Parser;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
@@ -14,6 +15,21 @@ use tokio::{
     sync::broadcast::Receiver,
     task::JoinSet,
 };
+const STATS_LINE_INTERVAL: u64 = 5;
+
+#[derive(Parser, Debug)]
+#[command(name = "echo-async")]
+#[command(about = "Asynchronous tcp echo server")]
+struct Args {
+    #[arg(long, default_value = "127.0.0.1")]
+    addr: String,
+
+    #[arg(long, default_value = "7878")]
+    port: u16,
+
+    #[arg(long)]
+    stats: bool,
+}
 
 async fn handle_conn(id: u32, mut stream: TcpStream, mut shutdown: Receiver<()>) -> Result<()> {
     let mut buf = [0u8; 4096];
@@ -47,9 +63,15 @@ async fn handle_conn(id: u32, mut stream: TcpStream, mut shutdown: Receiver<()>)
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let listener = TcpListener::bind("127.0.0.1:7878")
-        .await
-        .context("bind failed")?;
+    let args = Args::parse();
+    let listener = match TcpListener::bind(format!("{}:{}", args.addr, args.port))
+        .await {
+            Ok(l) => l,
+            Err(e) => {
+                eprintln!("bind failed: {e}");
+                std::process::exit(2);
+            }
+        };
     let mut total_conns: u32 = 0;
     let active_conns = Arc::new(AtomicU32::new(0));
     let mut tasks: JoinSet<Result<()>> = JoinSet::new();
@@ -72,6 +94,10 @@ async fn main() -> Result<()> {
         }
     };
     tokio::pin!(shutdown);
+
+    let mut stats_interval = tokio::time::interval(Duration::from_secs(STATS_LINE_INTERVAL));
+    stats_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+
     loop {
         tokio::select! {
             biased;
@@ -103,7 +129,10 @@ async fn main() -> Result<()> {
                     Err(e) if e.is_panic() => eprintln!("conn panicked: {}", e),
                     _ => {}
                 }
-            }
+            },
+            _ = stats_interval.tick(), if args.stats => {
+                eprintln!("{} current conns", active_conns.load(Ordering::SeqCst));
+            },
         }
     }
 
