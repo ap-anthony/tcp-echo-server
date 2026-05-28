@@ -31,6 +31,10 @@ struct Args {
     stats: bool,
 }
 
+/// Handles an inbound connection, echoing data received until shutdown occurs or client disconnects.
+/// 
+/// # Errors
+/// - Read error - failed to read into the input buffer from the stream
 async fn handle_conn(id: u32, mut stream: TcpStream, mut shutdown: Receiver<()>) -> Result<()> {
     let mut buf = [0u8; 4096];
     let mut total: u64 = 0;
@@ -61,12 +65,34 @@ async fn handle_conn(id: u32, mut stream: TcpStream, mut shutdown: Receiver<()>)
     }
 }
 
+/// Cleans up the remaining tasks after a server shutdown. Waits up to 5 seconds for connections
+/// to finish before returning.
+async fn clean_conns(mut tasks: JoinSet<Result<()>>) -> Result<()> {
+    let drain = tokio::time::timeout(Duration::from_secs(5), async {
+        while let Some(joined) = tasks.join_next().await {
+            match joined {
+                Ok(Ok(())) => {} // clean cleanup
+                Ok(Err(e)) => {
+                    eprintln!("conn error: {}", e)
+                }, // handler returned Err
+                Err(e) if e.is_panic() => eprintln!("conn panicked: {}", e),
+                Err(_) => {} // task was aborted
+            }
+        }
+    });
+    let _ = drain.await;
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
     let listener = match TcpListener::bind(format!("{}:{}", args.addr, args.port))
         .await {
-            Ok(l) => l,
+            Ok(l) => {
+                eprintln!("listening on {}", l.local_addr()?);
+                l
+            },
             Err(e) => {
                 eprintln!("bind failed: {e}");
                 std::process::exit(2);
@@ -76,8 +102,8 @@ async fn main() -> Result<()> {
     let active_conns = Arc::new(AtomicU32::new(0));
     let mut tasks: JoinSet<Result<()>> = JoinSet::new();
     let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
-    eprintln!("listening on {}", listener.local_addr()?);
-
+    
+    //  handle sigterm + sigint when possible
     let shutdown = async {
         #[cfg(unix)]
         {
@@ -94,9 +120,11 @@ async fn main() -> Result<()> {
         }
     };
     tokio::pin!(shutdown);
-
+    
     let mut stats_interval = tokio::time::interval(Duration::from_secs(STATS_LINE_INTERVAL));
-    stats_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    
+    // skip the first tick since it's redundant
+    stats_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay); 
 
     loop {
         tokio::select! {
@@ -136,19 +164,10 @@ async fn main() -> Result<()> {
         }
     }
 
-    // drain
-    let drain = tokio::time::timeout(Duration::from_secs(5), async {
-        while let Some(joined) = tasks.join_next().await {
-            match joined {
-                Ok(Ok(())) => {}                              // clean
-                Ok(Err(e)) => eprintln!("conn error: {}", e), // handler returned Err
-                Err(e) if e.is_panic() => eprintln!("conn panicked: {}", e),
-                Err(_) => {} // task was aborted
-            }
-        }
-    });
-    let _ = drain.await; // ignore timeout; we exit either way
-    eprintln!("shutdown complete");
+    match clean_conns(tasks).await {
+        Ok(_) => eprintln!("shutdown complete"),
+        Err(e) => eprintln!("error cleaning up conns {e}")
+    }
 
     Ok(())
 }
