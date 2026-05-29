@@ -32,7 +32,7 @@ struct Args {
 }
 
 /// Handles an inbound connection, echoing data received until shutdown occurs or client disconnects.
-/// 
+///
 /// # Errors
 /// - Read error - failed to read into the input buffer from the stream
 async fn handle_conn(id: u32, mut stream: TcpStream, mut shutdown: Receiver<()>) -> Result<()> {
@@ -74,7 +74,7 @@ async fn clean_conns(mut tasks: JoinSet<Result<()>>) -> Result<()> {
                 Ok(Ok(())) => {} // clean cleanup
                 Ok(Err(e)) => {
                     eprintln!("conn error: {}", e)
-                }, // handler returned Err
+                } // handler returned Err
                 Err(e) if e.is_panic() => eprintln!("conn panicked: {}", e),
                 Err(_) => {} // task was aborted
             }
@@ -87,22 +87,21 @@ async fn clean_conns(mut tasks: JoinSet<Result<()>>) -> Result<()> {
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
-    let listener = match TcpListener::bind(format!("{}:{}", args.addr, args.port))
-        .await {
-            Ok(l) => {
-                eprintln!("listening on {}", l.local_addr()?);
-                l
-            },
-            Err(e) => {
-                eprintln!("bind failed: {e}");
-                std::process::exit(2);
-            }
-        };
+    let listener = match TcpListener::bind(format!("{}:{}", args.addr, args.port)).await {
+        Ok(l) => {
+            eprintln!("listening on {}", l.local_addr()?);
+            l
+        }
+        Err(e) => {
+            eprintln!("bind failed: {e}");
+            std::process::exit(2);
+        }
+    };
     let mut total_conns: u32 = 0;
     let active_conns = Arc::new(AtomicU32::new(0));
     let mut tasks: JoinSet<Result<()>> = JoinSet::new();
     let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
-    
+
     //  handle sigterm + sigint when possible
     let shutdown = async {
         #[cfg(unix)]
@@ -120,11 +119,11 @@ async fn main() -> Result<()> {
         }
     };
     tokio::pin!(shutdown);
-    
+
     let mut stats_interval = tokio::time::interval(Duration::from_secs(STATS_LINE_INTERVAL));
-    
+
     // skip the first tick since it's redundant
-    stats_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay); 
+    stats_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
     loop {
         tokio::select! {
@@ -166,7 +165,7 @@ async fn main() -> Result<()> {
 
     match clean_conns(tasks).await {
         Ok(_) => eprintln!("shutdown complete"),
-        Err(e) => eprintln!("error cleaning up conns {e}")
+        Err(e) => eprintln!("error cleaning up conns {e}"),
     }
 
     Ok(())
