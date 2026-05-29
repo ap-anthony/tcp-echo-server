@@ -1,11 +1,9 @@
-use std::net::{TcpListener, TcpStream, SocketAddr};
+use anyhow::Result;
+use std::io::{Read, Write};
+use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
-use std::
-    io::{Read, Write}
-;
-use anyhow::Result;
 
 use echo_sync::server::run_server;
 

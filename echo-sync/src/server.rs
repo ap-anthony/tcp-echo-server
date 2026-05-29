@@ -1,6 +1,13 @@
 use anyhow::{Context, Result};
 use std::{
-    io::{Read, Write}, net::{TcpListener, TcpStream}, sync::{Arc, atomic::{AtomicBool, AtomicU32, Ordering}}, thread::JoinHandle, time::Duration
+    io::{Read, Write},
+    net::{TcpListener, TcpStream},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicU32, Ordering},
+    },
+    thread::JoinHandle,
+    time::Duration,
 };
 
 pub fn run_server(listener: TcpListener, shutdown: Arc<AtomicBool>) -> Result<()> {
