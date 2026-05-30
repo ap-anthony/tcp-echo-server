@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use std::{
     io::{Read, Write},
-    net::{TcpListener, TcpStream},
+    net::{IpAddr, TcpListener, TcpStream},
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicU32, Ordering},
@@ -29,10 +29,9 @@ pub fn run_server(listener: TcpListener, shutdown: Arc<AtomicBool>) -> Result<()
             Ok((stream, peer)) => {
                 total_conns += 1;
                 eprintln!(
-                    "accepted conn #{} from {}:{}",
+                    "accepted conn #{} from {}",
                     total_conns,
-                    peer.ip(),
-                    peer.port()
+                    peer
                 );
                 stream
                     .set_nonblocking(false)
