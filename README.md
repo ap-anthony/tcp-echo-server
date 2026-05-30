@@ -6,7 +6,7 @@ In order to run each program, since we have a crate workspace, you must specify 
 ```
 cargo run -p echo-sync -- --addr <addr> --port <port>
 
-cargo run -p echo-async -- --addr <addr> --port <port> --max-conns <N > 0> --stats
+cargo run -p echo-async -- --addr <addr> --port <port> --max-conns <N> --stats
 ```
 
 Every flag is optional, below are the defaults:
@@ -14,6 +14,7 @@ Every flag is optional, below are the defaults:
 - `--addr` => `127.0.0.1`
 - `--port` => `7878`
 - `--max-conns` => `0`
+  - note: max-conns must be greater than 0.
 - `--stats` => false
 
 ## How shutdown works
