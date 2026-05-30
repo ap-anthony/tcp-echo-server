@@ -15,11 +15,22 @@ struct Args {
 
     #[arg(long)]
     stats: bool,
+
+    #[arg(long)]
+    max_conns: Option<u32>
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
+    let mut max_conns = 0; // 0 => unbounded max-conns
+    match args.max_conns {
+        Some(val) => {
+            max_conns = val;
+        },
+        None => {}
+    }
+
     let listener = match TcpListener::bind(format!("{}:{}", args.addr, args.port)).await {
         Ok(l) => {
             eprintln!("listening on {}", l.local_addr()?);
@@ -50,7 +61,7 @@ async fn main() -> Result<()> {
         let _ = tokio::signal::ctrl_c().await;
         let _ = signal_tx.send(());
     });
-    start_server(listener, shutdown_tx, args.stats).await?;
+    start_server(listener, shutdown_tx, args.stats, max_conns).await?;
 
     signal_task.abort();
     let _ = signal_task.await;

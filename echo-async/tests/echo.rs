@@ -1,5 +1,6 @@
 // tests/echo.rs
 use std::net::{SocketAddr};
+use std::time::Duration;
 
 use echo_async::server::start_server;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -8,12 +9,16 @@ use tokio::sync::broadcast::Sender;
 use tokio::task::JoinHandle;
 
 async fn spawn_test_server() -> (SocketAddr, Sender<()>, JoinHandle<()>) {
+    spawn_max_conns_test_server(0).await
+}
+
+async fn spawn_max_conns_test_server(max_conns: u32) -> (SocketAddr, Sender<()>, JoinHandle<()>) {
     let socket = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = socket.local_addr().unwrap();
     let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
     let server_shutdown = shutdown_tx.clone();
     let t = tokio::spawn(async move {
-        start_server(socket, server_shutdown, false).await.unwrap();
+        start_server(socket, server_shutdown, false, max_conns).await.unwrap();
     });
     (addr, shutdown_tx, t)
 }
@@ -85,5 +90,30 @@ async fn graceful_server_drain() {
     assert_eq!(sock2.read(&mut buf).await.unwrap(), 0, "sock2 not closed");
     assert_eq!(sock3.read(&mut buf).await.unwrap(), 0, "sock3 not closed");
 
+    t.await.unwrap();
+}
+
+#[tokio::test]
+async fn test_max_conns() {
+    let (addr, shutdown, t) = spawn_max_conns_test_server(1).await; // should only allow 1 conn at a time
+
+    let mut sock1 = TcpStream::connect(addr).await.unwrap();
+    echo(&mut sock1, b"hello\n").await;
+
+    let mut sock2 = TcpStream::connect(addr).await.unwrap();
+    const SERVER_CAP_MSG: &str = "server is at max capacity. please try again later.\n";
+    let mut buf = [0u8; SERVER_CAP_MSG.len()];
+    sock2.read_exact(&mut buf).await.unwrap();
+    assert_eq!(&buf, SERVER_CAP_MSG.as_bytes());
+
+    drop(sock1);
+
+    // let the server process the dropped socket
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // it should accept another connection after dropping the sock1
+    echo_once(addr, b"hello\n").await;
+
+    shutdown.send(()).unwrap();
     t.await.unwrap();
 }

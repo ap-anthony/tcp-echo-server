@@ -84,6 +84,7 @@ pub async fn start_server(
     listener: TcpListener,
     shutdown_tx: Sender<()>,
     stats_enabled: bool,
+    max_conns: u32
 ) -> Result<()> {
     let mut total_conns: u32 = 0;
     let active_conns = Arc::new(AtomicU32::new(0));
@@ -110,17 +111,24 @@ pub async fn start_server(
                 break;
             },
             accept = listener.accept() => {
-                let (stream, peer) = accept.context("accept failed")?;
-                let active_clone = active_conns.clone();
-                total_conns += 1;
-                eprintln!("accepted conn #{} from {}", total_conns, peer);
-                active_clone.fetch_add(1, Ordering::SeqCst);
-                let conn_shutdown = shutdown_tx.subscribe();
-                tasks.spawn(async move {
-                    let result = handle_conn(total_conns, stream, conn_shutdown).await;
-                    active_clone.fetch_sub(1, Ordering::SeqCst);
-                    result
-                });
+                let (mut stream, peer) = accept.context("accept failed")?;
+                
+                if max_conns == 0 || active_conns.load(Ordering::SeqCst) < max_conns {
+                    let active_clone = active_conns.clone();
+                    total_conns += 1;
+                    eprintln!("accepted conn #{} from {}", total_conns, peer);
+                    active_clone.fetch_add(1, Ordering::SeqCst);
+                    let conn_shutdown = shutdown_tx.subscribe();
+                    tasks.spawn(async move {
+                        let result = handle_conn(total_conns, stream, conn_shutdown).await;
+                        active_clone.fetch_sub(1, Ordering::SeqCst);
+                        result
+                    });
+                } else {
+                    stream.write_all(b"server is at max capacity. please try again later.\n").await?;
+                    drop(stream);
+                }
+
             },
             Some(joined) = tasks.join_next(), if !tasks.is_empty() => {
                 match joined {
