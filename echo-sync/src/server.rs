@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use std::{
     io::{Read, Write},
-    net::{IpAddr, TcpListener, TcpStream},
+    net::{TcpListener, TcpStream},
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicU32, Ordering},
