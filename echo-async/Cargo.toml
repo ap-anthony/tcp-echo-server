@@ -7,4 +7,3 @@ edition = "2024"
 anyhow = "1"
 clap = { version = "4", features = [ "derive" ] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "signal", "time" ]}
-tokio-util = "0.7.18"
