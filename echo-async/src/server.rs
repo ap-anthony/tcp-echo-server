@@ -126,6 +126,7 @@ pub async fn start_server(
                 } else {
                     stream.write_all(b"server is at max capacity. please try again later.\n").await?;
                     drop(stream);
+                    eprintln!("rejected conn from {} at max capacity", peer);
                 }
 
             },
