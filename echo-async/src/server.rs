@@ -71,13 +71,13 @@ async fn clean_conns(mut tasks: JoinSet<Result<()>>) {
 
 /// Starts async server using tokio TcpListener. Takes a Sender to notify
 /// tasks to shutdown.
-/// 
+///
 /// # Arguments
 /// * `listener` - tokio TcpListener
 /// * `sender` - tokio broadcast Sender
-/// * `stats_enabled` - feature flag to display # of conns every N seconds 
+/// * `stats_enabled` - feature flag to display # of conns every N seconds
 /// (defined by STATS_LINE_INTERVAL)
-/// 
+///
 /// # Errors
 /// - accept failure -- listener fails to accept a connection
 pub async fn start_server(
@@ -91,7 +91,7 @@ pub async fn start_server(
     let mut stats_interval = tokio::time::interval(Duration::from_secs(STATS_LINE_INTERVAL));
 
     stats_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-    
+
     // skip the first tick since it's redundant
     if stats_enabled {
         stats_interval.tick().await;
