@@ -1,5 +1,5 @@
 // tests/echo.rs
-use std::net::{SocketAddr};
+use std::net::SocketAddr;
 use std::time::Duration;
 
 use echo_async::server::start_server;
@@ -18,7 +18,9 @@ async fn spawn_max_conns_test_server(max_conns: u32) -> (SocketAddr, Sender<()>,
     let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
     let server_shutdown = shutdown_tx.clone();
     let t = tokio::spawn(async move {
-        start_server(socket, server_shutdown, false, max_conns).await.unwrap();
+        start_server(socket, server_shutdown, false, max_conns)
+            .await
+            .unwrap();
     });
     (addr, shutdown_tx, t)
 }
@@ -69,7 +71,6 @@ async fn sequential_conns() {
     shutdown.send(()).unwrap();
     t.await.unwrap();
 }
-
 
 #[tokio::test]
 async fn graceful_server_drain() {

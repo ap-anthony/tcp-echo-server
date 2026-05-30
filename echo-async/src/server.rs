@@ -75,8 +75,7 @@ async fn clean_conns(mut tasks: JoinSet<Result<()>>) {
 /// # Arguments
 /// * `listener` - tokio TcpListener
 /// * `sender` - tokio broadcast Sender
-/// * `stats_enabled` - feature flag to display # of conns every N seconds
-/// (defined by STATS_LINE_INTERVAL)
+/// * `stats_enabled` - feature flag to display # of conns every N seconds (defined by STATS_LINE_INTERVAL)
 ///
 /// # Errors
 /// - accept failure -- listener fails to accept a connection
@@ -84,7 +83,7 @@ pub async fn start_server(
     listener: TcpListener,
     shutdown_tx: Sender<()>,
     stats_enabled: bool,
-    max_conns: u32
+    max_conns: u32,
 ) -> Result<()> {
     let mut total_conns: u32 = 0;
     let active_conns = Arc::new(AtomicU32::new(0));
@@ -112,7 +111,7 @@ pub async fn start_server(
             },
             accept = listener.accept() => {
                 let (mut stream, peer) = accept.context("accept failed")?;
-                
+
                 if max_conns == 0 || active_conns.load(Ordering::SeqCst) < max_conns {
                     let active_clone = active_conns.clone();
                     total_conns += 1;

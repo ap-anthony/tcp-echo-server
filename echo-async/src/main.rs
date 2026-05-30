@@ -17,18 +17,15 @@ struct Args {
     stats: bool,
 
     #[arg(long)]
-    max_conns: Option<u32>
+    max_conns: Option<u32>,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
     let mut max_conns = 0; // 0 => unbounded max-conns
-    match args.max_conns {
-        Some(val) => {
-            max_conns = val;
-        },
-        None => {}
+    if let Some(val) = args.max_conns {
+        max_conns = val;
     }
 
     let listener = match TcpListener::bind(format!("{}:{}", args.addr, args.port)).await {
