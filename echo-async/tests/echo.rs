@@ -1,4 +1,3 @@
-// tests/echo.rs
 use std::net::SocketAddr;
 use std::time::Duration;
 

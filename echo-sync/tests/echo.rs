@@ -35,7 +35,6 @@ fn echo(sock: &mut TcpStream, msg: &[u8]) {
 fn echoes_a_line() {
     // bind on port 0, spawn the server task, get the actual addr back
     let (addr, shutdown, t) = spawn_test_server().unwrap();
-    // simple sync client is fine inside an async test
     echo_once(addr, b"hello\n");
     shutdown.store(true, Ordering::SeqCst);
     t.join().unwrap();
