@@ -76,7 +76,8 @@ async fn clean_conns(mut tasks: JoinSet<Result<()>>) {
 /// * `listener` - tokio TcpListener
 /// * `sender` - tokio broadcast Sender
 /// * `stats_enabled` - feature flag to display # of conns every N seconds (defined by STATS_LINE_INTERVAL)
-///
+/// * `max_conns` -- N max number of connections the server will accept. 0 will allow max bounded connections.
+/// 
 /// # Errors
 /// - accept failure -- listener fails to accept a connection
 pub async fn start_server(
