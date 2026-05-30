@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{Result};
 use clap::Parser;
 use echo_sync::server::run_server;
 use std::{
@@ -27,12 +27,13 @@ fn main() -> Result<()> {
         let shutdown = shutdown.clone();
         ctrlc::set_handler(move || shutdown.store(true, Ordering::SeqCst))?;
     }
-    let listener = TcpListener::bind(format!("{}:{}", args.addr, args.port)).context("bind failed");
-    if let Err(e) = listener {
-        eprintln!("bind failed: {e}");
-        std::process::exit(2);
-    }
-    let listener = listener?;
+    let listener = match TcpListener::bind(format!("{}:{}", args.addr, args.port)) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("bind failed: {e}");
+            std::process::exit(2);
+        }
+    };
     eprintln!("listening on {}:{}", args.addr, args.port);
 
     run_server(listener, shutdown)?;
